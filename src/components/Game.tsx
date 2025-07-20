@@ -12,6 +12,24 @@ const FRICTION = 0.95
 const JUMP_FORCE = -15
 const MOVE_FORCE = 2
 
+// Visual effects
+type Particle = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  life: number
+  maxLife: number
+  color: string
+  size: number
+}
+
+type ScreenShake = {
+  intensity: number
+  duration: number
+  remaining: number
+}
+
 // Character types
 type Character = {
   id: string
@@ -46,6 +64,10 @@ const Game = () => {
   const [winner, setWinner] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileControls, setShowMobileControls] = useState(false)
+  const [particles, setParticles] = useState<Particle[]>([])
+  const [screenShake, setScreenShake] = useState<ScreenShake>({ intensity: 0, duration: 0, remaining: 0 })
+  const [comboCount, setComboCount] = useState(0)
+  const [lastHitTime, setLastHitTime] = useState(0)
   
   // Detect mobile device
   useEffect(() => {
@@ -103,6 +125,28 @@ const Game = () => {
       weapon: 'Havoc Staff'
     }
   ])
+
+  // Particle system functions
+  const createParticles = useCallback((x: number, y: number, color: string, count: number = 5) => {
+    const newParticles: Particle[] = []
+    for (let i = 0; i < count; i++) {
+      newParticles.push({
+        x: x + (Math.random() - 0.5) * 20,
+        y: y + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 10,
+        vy: (Math.random() - 0.5) * 10 - 2,
+        life: 1,
+        maxLife: 1,
+        color,
+        size: Math.random() * 4 + 2
+      })
+    }
+    setParticles(prev => [...prev, ...newParticles])
+  }, [])
+
+  const createScreenShake = useCallback((intensity: number, duration: number) => {
+    setScreenShake({ intensity, duration, remaining: duration })
+  }, [])
 
   // Handle mobile input
   const handleMobileInput = useCallback((input: string, pressed: boolean) => {
@@ -251,19 +295,59 @@ const Game = () => {
     if (distance < attackRange) {
       // He-Man attacking Skeletor
       if (heman.attacking && !skeletor.blocking) {
-        skeletor.health -= 5
-        skeletor.vx += heman.facing === 'right' ? 5 : -5
+        const damage = heman.power >= 50 ? 15 : 8 // More damage with high power
+        skeletor.health -= damage
+        skeletor.vx += heman.facing === 'right' ? 8 : -8
+        
+        // Create hit effects
+        createParticles(skeletor.x + skeletor.width/2, skeletor.y + skeletor.height/2, '#FF4444', 8)
+        createScreenShake(5, 200)
+        
+        // Combo system
+        const currentTime = Date.now()
+        if (currentTime - lastHitTime < 1000) {
+          setComboCount(prev => prev + 1)
+        } else {
+          setComboCount(1)
+        }
+        setLastHitTime(currentTime)
+        
+        // Haptic feedback for mobile
+        if ('vibrate' in navigator && isMobile) {
+          navigator.vibrate(damage > 10 ? 100 : 50)
+        }
       }
       
       // Skeletor attacking He-Man
       if (skeletor.attacking && !heman.blocking) {
-        heman.health -= 5
-        heman.vx += skeletor.facing === 'right' ? 5 : -5
+        const damage = skeletor.power >= 50 ? 15 : 8
+        heman.health -= damage
+        heman.vx += skeletor.facing === 'right' ? 8 : -8
+        
+        // Create hit effects
+        createParticles(heman.x + heman.width/2, heman.y + heman.height/2, '#4444FF', 8)
+        createScreenShake(5, 200)
+        
+        // Haptic feedback for mobile
+        if ('vibrate' in navigator && isMobile) {
+          navigator.vibrate(damage > 10 ? 100 : 50)
+        }
+      }
+      
+      // Blocking effects
+      if ((heman.attacking && skeletor.blocking) || (skeletor.attacking && heman.blocking)) {
+        const blockX = distance < 40 ? (heman.x + skeletor.x) / 2 : (heman.facing === 'right' ? skeletor.x : heman.x)
+        createParticles(blockX, Math.min(heman.y, skeletor.y) + 30, '#FFD700', 6)
+        createScreenShake(2, 100)
+        
+        if ('vibrate' in navigator && isMobile) {
+          navigator.vibrate(30)
+        }
       }
     }
     
     return chars
-  }, [])
+  }, [createParticles, createScreenShake, lastHitTime, isMobile])
 
   // Render game
   const render = useCallback(() => {
@@ -273,20 +357,40 @@ const Game = () => {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
+    // Apply screen shake
+    let shakeX = 0, shakeY = 0
+    if (screenShake.remaining > 0) {
+      shakeX = (Math.random() - 0.5) * screenShake.intensity
+      shakeY = (Math.random() - 0.5) * screenShake.intensity
+      ctx.save()
+      ctx.translate(shakeX, shakeY)
+    }
+    
     // Clear canvas
     ctx.fillStyle = '#1A1A2E'
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
     
-    // Draw background gradient
+    // Draw animated background gradient
+    const time = Date.now() * 0.001
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT)
-    gradient.addColorStop(0, '#2D1B69')
+    gradient.addColorStop(0, `hsl(${240 + Math.sin(time) * 10}, 70%, ${20 + Math.sin(time * 0.5) * 5}%)`)
     gradient.addColorStop(1, '#1A1A2E')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
     
-    // Draw ground
+    // Draw ground with texture
     ctx.fillStyle = '#4A4A4A'
     ctx.fillRect(0, CANVAS_HEIGHT - 80, CANVAS_WIDTH, 80)
+    
+    // Ground texture lines
+    ctx.strokeStyle = '#666666'
+    ctx.lineWidth = 1
+    for (let i = 0; i < CANVAS_WIDTH; i += 40) {
+      ctx.beginPath()
+      ctx.moveTo(i, CANVAS_HEIGHT - 80)
+      ctx.lineTo(i + 20, CANVAS_HEIGHT)
+      ctx.stroke()
+    }
     
     // Draw characters
     characters.forEach(char => {
@@ -320,14 +424,41 @@ const Game = () => {
       ctx.fillText(char.name, char.x + char.width / 2, char.y - 10)
     })
     
-    // Draw particles/effects
+    // Draw particles
+    particles.forEach(particle => {
+      const alpha = particle.life / particle.maxLife
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = particle.color
+      ctx.fillRect(particle.x - particle.size/2, particle.y - particle.size/2, particle.size, particle.size)
+    })
+    ctx.globalAlpha = 1
+    
+    // Draw combo counter
+    if (comboCount > 1) {
+      ctx.fillStyle = '#FFD700'
+      ctx.font = isMobile ? '20px Orbitron' : '32px Orbitron'
+      ctx.textAlign = 'center'
+      ctx.strokeStyle = '#000'
+      ctx.lineWidth = 2
+      ctx.strokeText(`${comboCount}x COMBO!`, CANVAS_WIDTH/2, 60)
+      ctx.fillText(`${comboCount}x COMBO!`, CANVAS_WIDTH/2, 60)
+    }
+    
+    // Draw background particles/effects
     ctx.fillStyle = '#FFD700'
+    ctx.globalAlpha = 0.3
     for (let i = 0; i < 10; i++) {
       const x = Math.random() * CANVAS_WIDTH
       const y = Math.random() * 60 + CANVAS_HEIGHT - 80
       ctx.fillRect(x, y, 2, 2)
     }
-  }, [characters, isMobile])
+    ctx.globalAlpha = 1
+    
+    // Restore canvas if screen shake was applied
+    if (screenShake.remaining > 0) {
+      ctx.restore()
+    }
+  }, [characters, isMobile, particles, comboCount, screenShake.remaining, screenShake.intensity])
 
   // Game loop
   const gameLoop = useCallback(() => {
@@ -348,11 +479,35 @@ const Game = () => {
         
         return newChars
       })
+      
+      // Update particles
+      setParticles(prevParticles => 
+        prevParticles
+          .map(particle => ({
+            ...particle,
+            x: particle.x + particle.vx,
+            y: particle.y + particle.vy,
+            vy: particle.vy + 0.2, // gravity
+            life: particle.life - 0.02
+          }))
+          .filter(particle => particle.life > 0)
+      )
+      
+      // Update screen shake
+      setScreenShake(prev => ({
+        ...prev,
+        remaining: Math.max(0, prev.remaining - 16) // 60fps = ~16ms per frame
+      }))
+      
+      // Reset combo if too much time has passed
+      if (Date.now() - lastHitTime > 2000) {
+        setComboCount(0)
+      }
     }
     
     render()
     animationRef.current = requestAnimationFrame(gameLoop)
-  }, [gameState, handleInput, updatePhysics, checkCombat, render])
+  }, [gameState, handleInput, updatePhysics, checkCombat, render, lastHitTime])
 
   // Keyboard event handlers
   useEffect(() => {
@@ -398,6 +553,10 @@ const Game = () => {
       vy: 0
     })))
     setWinner(null)
+    setParticles([])
+    setScreenShake({ intensity: 0, duration: 0, remaining: 0 })
+    setComboCount(0)
+    setLastHitTime(0)
   }
 
   const resetGame = () => {
@@ -467,6 +626,11 @@ const Game = () => {
                 style={{ width: `${(characters[0].power / characters[0].maxPower) * 100}%` }}
               />
             </div>
+            {comboCount > 1 && (
+              <div className="text-yellow-400 font-bold text-xs md:text-sm mt-1">
+                {comboCount}x COMBO!
+              </div>
+            )}
             {!isMobile && (
               <div className="text-xs text-yellow-400 mt-2">
                 WASD + Space

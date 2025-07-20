@@ -15,6 +15,14 @@ const MobileControls = ({ onInput, player }: MobileControlsProps) => {
       const newSet = new Set(prev)
       if (pressed) {
         newSet.add(input)
+        // Add haptic feedback for mobile devices
+        if ('vibrate' in navigator && pressed) {
+          if (input === 'attack' || input === ' ') {
+            navigator.vibrate(50) // Strong vibration for attacks
+          } else {
+            navigator.vibrate(20) // Light vibration for movement
+          }
+        }
       } else {
         newSet.delete(input)
       }
