@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
-import { Sword, Shield, Zap, RotateCcw, Play, Pause } from 'lucide-react'
+import { Sword, Shield, Zap, RotateCcw, Play, Pause, Smartphone } from 'lucide-react'
+import MobileControls from './MobileControls'
 
 // Game constants
-const CANVAS_WIDTH = 1200
-const CANVAS_HEIGHT = 600
+const CANVAS_WIDTH = 800
+const CANVAS_HEIGHT = 400
 const GRAVITY = 0.8
 const FRICTION = 0.95
 const JUMP_FORCE = -15
@@ -43,6 +44,21 @@ const Game = () => {
   
   const [gameState, setGameState] = useState<GameState>('menu')
   const [winner, setWinner] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+  const [showMobileControls, setShowMobileControls] = useState(false)
+  
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768
+      setIsMobile(mobile)
+      setShowMobileControls(mobile)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   
   // Initialize characters
   const [characters, setCharacters] = useState<Character[]>([
@@ -54,8 +70,8 @@ const Game = () => {
       maxHealth: 100,
       power: 0,
       maxPower: 100,
-      x: 200,
-      y: 400,
+      x: 150,
+      y: 250,
       vx: 0,
       vy: 0,
       width: 40,
@@ -74,8 +90,8 @@ const Game = () => {
       maxHealth: 100,
       power: 0,
       maxPower: 100,
-      x: 900,
-      y: 400,
+      x: 600,
+      y: 250,
       vx: 0,
       vy: 0,
       width: 40,
@@ -87,6 +103,24 @@ const Game = () => {
       weapon: 'Havoc Staff'
     }
   ])
+
+  // Handle mobile input
+  const handleMobileInput = useCallback((input: string, pressed: boolean) => {
+    if (pressed) {
+      keysRef.current.add(input)
+    } else {
+      keysRef.current.delete(input)
+    }
+    
+    // Map mobile inputs to game actions
+    if (input === 'attack') {
+      if (pressed) {
+        keysRef.current.add(' ')
+      } else {
+        keysRef.current.delete(' ')
+      }
+    }
+  }, [])
 
   // Physics and collision detection
   const updatePhysics = useCallback((chars: Character[]) => {
@@ -104,7 +138,7 @@ const Game = () => {
       newChar.vx *= FRICTION
       
       // Ground collision
-      const groundY = CANVAS_HEIGHT - 100
+      const groundY = CANVAS_HEIGHT - 80
       if (newChar.y + newChar.height > groundY) {
         newChar.y = groundY - newChar.height
         newChar.vy = 0
@@ -161,32 +195,41 @@ const Game = () => {
         heman.attacking = false
       }
       
-      // Player 2 (Skeletor) controls: Arrow keys
+      // Player 2 (Skeletor) - Simple AI
       const skeletor = newChars[1]
-      if (keys.has('ArrowLeft')) {
-        skeletor.vx -= MOVE_FORCE
-        skeletor.facing = 'left'
+      const distance = Math.abs(heman.x - skeletor.x)
+      
+      // AI movement
+      if (distance > 100) {
+        if (heman.x > skeletor.x) {
+          skeletor.vx += MOVE_FORCE * 0.8
+          skeletor.facing = 'right'
+        } else {
+          skeletor.vx -= MOVE_FORCE * 0.8
+          skeletor.facing = 'left'
+        }
       }
-      if (keys.has('ArrowRight')) {
-        skeletor.vx += MOVE_FORCE
-        skeletor.facing = 'right'
-      }
-      if (keys.has('ArrowUp') && skeletor.grounded) {
+      
+      // AI jumping
+      if (Math.random() < 0.01 && skeletor.grounded) {
         skeletor.vy = JUMP_FORCE
       }
-      if (keys.has('ArrowDown')) {
-        skeletor.blocking = true
-      } else {
-        skeletor.blocking = false
-      }
-      if (keys.has('Enter')) {
+      
+      // AI attacking
+      if (distance < 80 && Math.random() < 0.1) {
         skeletor.attacking = true
         if (skeletor.power >= 20) {
           skeletor.power -= 20
-          // Special attack logic here
         }
       } else {
         skeletor.attacking = false
+      }
+      
+      // AI blocking
+      if (heman.attacking && distance < 100 && Math.random() < 0.3) {
+        skeletor.blocking = true
+      } else {
+        skeletor.blocking = false
       }
       
       // Regenerate power slowly
@@ -243,7 +286,7 @@ const Game = () => {
     
     // Draw ground
     ctx.fillStyle = '#4A4A4A'
-    ctx.fillRect(0, CANVAS_HEIGHT - 100, CANVAS_WIDTH, 100)
+    ctx.fillRect(0, CANVAS_HEIGHT - 80, CANVAS_WIDTH, 80)
     
     // Draw characters
     characters.forEach(char => {
@@ -272,19 +315,19 @@ const Game = () => {
       
       // Name label
       ctx.fillStyle = '#FFD700'
-      ctx.font = '16px Orbitron'
+      ctx.font = isMobile ? '12px Orbitron' : '16px Orbitron'
       ctx.textAlign = 'center'
       ctx.fillText(char.name, char.x + char.width / 2, char.y - 10)
     })
     
     // Draw particles/effects
     ctx.fillStyle = '#FFD700'
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 10; i++) {
       const x = Math.random() * CANVAS_WIDTH
-      const y = Math.random() * 100 + CANVAS_HEIGHT - 100
+      const y = Math.random() * 60 + CANVAS_HEIGHT - 80
       ctx.fillRect(x, y, 2, 2)
     }
-  }, [characters])
+  }, [characters, isMobile])
 
   // Game loop
   const gameLoop = useCallback(() => {
@@ -349,8 +392,8 @@ const Game = () => {
       ...char,
       health: char.maxHealth,
       power: 0,
-      x: char.id === 'heman' ? 200 : 900,
-      y: 400,
+      x: char.id === 'heman' ? 150 : 600,
+      y: 250,
       vx: 0,
       vy: 0
     })))
@@ -362,106 +405,141 @@ const Game = () => {
     setWinner(null)
   }
 
+  const toggleMobileControls = () => {
+    setShowMobileControls(!showMobileControls)
+  }
+
   return (
-    <div className="w-full h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-gray-900 flex flex-col items-center justify-center p-4">
+    <div className="w-full min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-gray-900 flex flex-col items-center justify-center p-2 md:p-4 overflow-hidden">
       {/* Game Title */}
-      <div className="text-center mb-6">
-        <h1 className="text-6xl font-bold text-yellow-400 glow-text mb-2">
+      <div className="text-center mb-2 md:mb-6">
+        <h1 className={`${isMobile ? 'text-3xl' : 'text-6xl'} font-bold text-yellow-400 glow-text mb-1 md:mb-2`}>
           HE-MAN
         </h1>
-        <h2 className="text-3xl font-bold text-red-600 glow-text">
+        <h2 className={`${isMobile ? 'text-lg' : 'text-3xl'} font-bold text-red-600 glow-text`}>
           MASTERS COMBAT ARENA
         </h2>
       </div>
 
+      {/* Mobile Controls Toggle */}
+      {isMobile && (
+        <div className="mb-2">
+          <Button
+            onClick={toggleMobileControls}
+            variant="outline"
+            size="sm"
+            className="border-yellow-400 text-yellow-400"
+          >
+            <Smartphone className="w-4 h-4 mr-2" />
+            {showMobileControls ? 'Hide' : 'Show'} Touch Controls
+          </Button>
+        </div>
+      )}
+
       {/* Game Canvas */}
-      <div className="relative">
+      <div className="relative w-full max-w-4xl">
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="border-4 border-yellow-400 rounded-lg shadow-2xl game-canvas"
-          style={{ maxWidth: '100%', height: 'auto' }}
+          className="border-2 md:border-4 border-yellow-400 rounded-lg shadow-2xl game-canvas w-full h-auto"
+          style={{ 
+            maxWidth: '100%', 
+            height: 'auto',
+            touchAction: 'none' // Prevent scrolling on touch
+          }}
         />
         
         {/* Game UI Overlay */}
-        <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
+        <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
           {/* Player 1 UI */}
-          <Card className="bg-black/80 border-yellow-400 p-4">
-            <div className="text-yellow-400 font-bold mb-2">{characters[0].name}</div>
-            <div className="w-48 h-4 bg-gray-700 rounded mb-2">
+          <Card className="bg-black/80 border-yellow-400 p-2 md:p-4">
+            <div className="text-yellow-400 font-bold mb-1 text-xs md:text-sm">{characters[0].name}</div>
+            <div className={`${isMobile ? 'w-24 h-2' : 'w-48 h-4'} bg-gray-700 rounded mb-1`}>
               <div 
                 className="h-full health-bar rounded transition-all duration-300"
                 style={{ width: `${(characters[0].health / characters[0].maxHealth) * 100}%` }}
               />
             </div>
-            <div className="w-48 h-2 bg-gray-700 rounded">
+            <div className={`${isMobile ? 'w-24 h-1' : 'w-48 h-2'} bg-gray-700 rounded`}>
               <div 
                 className="h-full power-bar rounded transition-all duration-300"
                 style={{ width: `${(characters[0].power / characters[0].maxPower) * 100}%` }}
               />
             </div>
-            <div className="text-xs text-yellow-400 mt-2">
-              WASD + Space
-            </div>
+            {!isMobile && (
+              <div className="text-xs text-yellow-400 mt-2">
+                WASD + Space
+              </div>
+            )}
           </Card>
 
           {/* Player 2 UI */}
-          <Card className="bg-black/80 border-red-600 p-4">
-            <div className="text-red-400 font-bold mb-2">{characters[1].name}</div>
-            <div className="w-48 h-4 bg-gray-700 rounded mb-2">
+          <Card className="bg-black/80 border-red-600 p-2 md:p-4">
+            <div className="text-red-400 font-bold mb-1 text-xs md:text-sm">{characters[1].name}</div>
+            <div className={`${isMobile ? 'w-24 h-2' : 'w-48 h-4'} bg-gray-700 rounded mb-1`}>
               <div 
                 className="h-full health-bar rounded transition-all duration-300"
                 style={{ width: `${(characters[1].health / characters[1].maxHealth) * 100}%` }}
               />
             </div>
-            <div className="w-48 h-2 bg-gray-700 rounded">
+            <div className={`${isMobile ? 'w-24 h-1' : 'w-48 h-2'} bg-gray-700 rounded`}>
               <div 
                 className="h-full power-bar rounded transition-all duration-300"
                 style={{ width: `${(characters[1].power / characters[1].maxPower) * 100}%` }}
               />
             </div>
-            <div className="text-xs text-red-400 mt-2">
-              Arrows + Enter
-            </div>
+            {!isMobile && (
+              <div className="text-xs text-red-400 mt-2">
+                AI Controlled
+              </div>
+            )}
           </Card>
         </div>
 
         {/* Game State Overlays */}
         {gameState === 'menu' && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-            <Card className="bg-black/90 border-yellow-400 p-8 text-center">
-              <h3 className="text-3xl font-bold text-yellow-400 mb-6">
+            <Card className="bg-black/90 border-yellow-400 p-4 md:p-8 text-center mx-4">
+              <h3 className={`${isMobile ? 'text-xl' : 'text-3xl'} font-bold text-yellow-400 mb-4 md:mb-6`}>
                 BY THE POWER OF GRAYSKULL!
               </h3>
-              <p className="text-white mb-6">
+              <p className="text-white mb-4 md:mb-6 text-sm md:text-base">
                 Choose your warrior and enter the arena
               </p>
               <Button 
                 onClick={startGame}
-                className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 text-xl"
+                className="bg-red-600 hover:bg-red-700 text-white px-4 md:px-8 py-2 md:py-3 text-lg md:text-xl"
               >
                 <Sword className="mr-2" />
                 START BATTLE
               </Button>
-              <div className="mt-6 text-sm text-gray-400">
-                <p>Player 1: WASD + Space (Attack) + S (Block)</p>
-                <p>Player 2: Arrow Keys + Enter (Attack) + Down (Block)</p>
-              </div>
+              {!isMobile && (
+                <div className="mt-6 text-sm text-gray-400">
+                  <p>Player 1: WASD + Space (Attack) + S (Block)</p>
+                  <p>Player 2: AI Controlled</p>
+                </div>
+              )}
+              {isMobile && (
+                <div className="mt-4 text-xs text-gray-400">
+                  <p>Use touch controls to fight!</p>
+                </div>
+              )}
             </Card>
           </div>
         )}
 
         {gameState === 'paused' && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-            <Card className="bg-black/90 border-yellow-400 p-8 text-center">
-              <h3 className="text-3xl font-bold text-yellow-400 mb-6">
+            <Card className="bg-black/90 border-yellow-400 p-4 md:p-8 text-center mx-4">
+              <h3 className={`${isMobile ? 'text-xl' : 'text-3xl'} font-bold text-yellow-400 mb-4 md:mb-6`}>
                 PAUSED
               </h3>
-              <div className="space-x-4">
+              <div className="space-x-2 md:space-x-4">
                 <Button 
                   onClick={() => setGameState('playing')}
                   className="bg-green-600 hover:bg-green-700"
+                  size={isMobile ? 'sm' : 'default'}
                 >
                   <Play className="mr-2" />
                   Resume
@@ -469,6 +547,7 @@ const Game = () => {
                 <Button 
                   onClick={resetGame}
                   className="bg-red-600 hover:bg-red-700"
+                  size={isMobile ? 'sm' : 'default'}
                 >
                   <RotateCcw className="mr-2" />
                   Main Menu
@@ -480,17 +559,18 @@ const Game = () => {
 
         {gameState === 'victory' && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-            <Card className="bg-black/90 border-yellow-400 p-8 text-center">
-              <h3 className="text-4xl font-bold text-yellow-400 mb-4 glow-text">
+            <Card className="bg-black/90 border-yellow-400 p-4 md:p-8 text-center mx-4">
+              <h3 className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-bold text-yellow-400 mb-4 glow-text`}>
                 {winner} WINS!
               </h3>
-              <p className="text-white mb-6">
+              <p className="text-white mb-4 md:mb-6 text-sm md:text-base">
                 {winner === 'He-Man' ? 'By the power of Grayskull!' : 'Evil triumphs this day!'}
               </p>
-              <div className="space-x-4">
+              <div className="space-x-2 md:space-x-4">
                 <Button 
                   onClick={startGame}
                   className="bg-green-600 hover:bg-green-700"
+                  size={isMobile ? 'sm' : 'default'}
                 >
                   <RotateCcw className="mr-2" />
                   Fight Again
@@ -498,6 +578,7 @@ const Game = () => {
                 <Button 
                   onClick={resetGame}
                   className="bg-red-600 hover:bg-red-700"
+                  size={isMobile ? 'sm' : 'default'}
                 >
                   Main Menu
                 </Button>
@@ -507,10 +588,17 @@ const Game = () => {
         )}
       </div>
 
+      {/* Mobile Touch Controls */}
+      {showMobileControls && gameState === 'playing' && (
+        <MobileControls onInput={handleMobileInput} player={1} />
+      )}
+
       {/* Controls Info */}
-      <div className="mt-6 text-center text-yellow-400">
-        <p className="text-sm">Press ESC to pause • Build power to unleash special attacks</p>
-      </div>
+      {!isMobile && (
+        <div className="mt-6 text-center text-yellow-400">
+          <p className="text-sm">Press ESC to pause • Build power to unleash special attacks</p>
+        </div>
+      )}
     </div>
   )
 }

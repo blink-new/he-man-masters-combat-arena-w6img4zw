@@ -91,6 +91,12 @@
 
     font-family: Orbitron, monospace;
     overflow: hidden;
+    user-select: none;
+    user-select: none;
+    user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -134,4 +140,42 @@
 
 .pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Mobile optimizations */
+@media (width <= 768px) {
+  body {
+    overflow: hidden auto;
+  }
+  
+  .game-canvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 50vh;
+  }
+}
+
+/* Touch button styles */
+.touch-button {
+  touch-action: manipulation;
+  user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-button:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
+/* Prevent zoom on double tap */
+* {
+  touch-action: manipulation;
+}
+
+/* Mobile viewport fix */
+@supports (-webkit-touch-callout: none) {
+  .mobile-viewport {
+    height: -webkit-fill-available;
+  }
 }
